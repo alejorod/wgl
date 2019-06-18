@@ -24,11 +24,11 @@ function createVAOfromOBJ(gl, src) {
         }
 
         if (d[0] == 'v') {
-            vertices.push(d.slice(1));
+            vertices.push(d.slice(1).map(v => Number(v)));
         } else if (d[0] == 'vt') {
-            uvs.push(d.slice(1));
+            uvs.push(d.slice(1).map(v => Number(v)));
         } else if (d[0] == 'vn') {
-            normals.push(d.slice(1));
+            normals.push(d.slice(1).map(v => Number(v)));
         } else {
             faces.push(d.slice(1));
         }
@@ -45,4 +45,36 @@ function createVAOfromOBJ(gl, src) {
     return createVAO(gl, buffers);
 }
 
-function loop() {}
+function loop(cb) {
+    let last;
+    let delta;
+
+    function main(time) {
+        requestAnimationFrame(main);
+        last = last || time;
+        delta = (time - last) / 1000;
+        last = time;
+        cb(delta);
+    }
+
+    requestAnimationFrame(main);
+}
+
+class OrbitCamera {
+    constructor() {
+        this.r = 2;
+        this.rx = 0;
+        this.ry = 0;
+    }
+
+    update(delta) {
+    }
+
+    matrix() {
+        const y = this.r * Math.sin(this.ry) * Math.sin(this.rx);
+        const z = this.r * Math.cos(this.ry);
+        const x = this.r * Math.sin(this.ry) * Math.cos(this.rx);
+
+        return glMatrix.mat4.lookAt([], [x, y, z], [0, 0, 0], [0, 1, 0]);
+    }
+}

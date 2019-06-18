@@ -15,7 +15,7 @@ function updateViewPort(gl, left, top, right, bottom) {
     gl.viewport(left, top, right, bottom);
 }
 function clear(gl) {
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 }
 
 const V_SHADER = 0;
@@ -50,14 +50,20 @@ function deleteShader(gl, shader) {
     gl.deleteShader(shader);
 }
 
-function createProgram(gl, vshader, fshader, uniforms) {
+function createProgram(gl, vshader, fshader, uniforms=[]) {
     const program = gl.createProgram();
     gl.attachShader(program, vshader);
     gl.attachShader(program, fshader);
     gl.linkProgram(program);
     const success = gl.getProgramParameter(program, gl.LINK_STATUS);
     if (success) {
-        return program;
+        return {
+            id: program,
+            locations: uniforms.reduce((p, c) => {
+                p[c] = gl.getUniformLocation(program, c);
+                return p;
+            }, {})
+        };
     }
     
     console.log(gl.getProgramInfoLog(program));
@@ -65,7 +71,7 @@ function createProgram(gl, vshader, fshader, uniforms) {
 }
 
 function deleteProgram(gl, program) {
-    gl.deleteProgram(program);
+    gl.deleteProgram(program.id);
 }
 
 function createBuffer(gl, data) {
@@ -104,10 +110,19 @@ function deleteVAO(gl, vao) {
     gl.deleteVertexArray(vao.id);
 }
 
-function setUniforms(gl, program, uniforms) {}
+function setUniforms(gl, program, uniforms) {
+    Object.keys(program.locations).forEach(k => {
+        const data = uniforms[k];
+        const loc = program.locations[k];
+        if (data.length && data.length == 16) {
+            gl.uniformMatrix4fv(loc, false, data);
+        }
+    });
+}
 
 function draw(gl, program, vao, uniforms) {
-    gl.useProgram(program);
+    gl.useProgram(program.id);
+    setUniforms(gl, program, uniforms);
     gl.bindVertexArray(vao.id);
     gl.drawArrays(gl.TRIANGLES, 0, vao.count);
 }
