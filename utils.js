@@ -60,20 +60,49 @@ function loop(cb) {
     requestAnimationFrame(main);
 }
 
+const keyboard = (function() {
+    const state = {};
+    const mapk = {
+        37: 'left',
+        39: 'right',
+        40: 'down',
+        38: 'up'
+    };
+
+    window.onkeydown = (e) => { state[mapk[e.keyCode]] = true; }
+    window.onkeyup = (e) => { state[mapk[e.keyCode]] = false; }
+    return state;
+})();
+
 class OrbitCamera {
     constructor() {
         this.r = 2;
-        this.rx = 0;
+        this.rx = Math.PI / 2;
         this.ry = 0;
     }
 
     update(delta) {
+        if (keyboard.right) {
+            this.ry += Math.PI * delta;
+        }
+
+        if (keyboard.left) {
+            this.ry -= Math.PI * delta;
+        }
+
+        if (keyboard.up) {
+            this.rx -= Math.PI * delta;
+        }
+
+        if (keyboard.down) {
+            this.rx += Math.PI * delta;
+        }
     }
 
     matrix() {
-        const y = this.r * Math.sin(this.ry) * Math.sin(this.rx);
-        const z = this.r * Math.cos(this.ry);
-        const x = this.r * Math.sin(this.ry) * Math.cos(this.rx);
+        const x = this.r * Math.sin(this.rx) * Math.sin(this.ry);
+        const y = this.r * Math.cos(this.rx);
+        const z = this.r * Math.sin(this.rx) * Math.cos(this.ry);
 
         return glMatrix.mat4.lookAt([], [x, y, z], [0, 0, 0], [0, 1, 0]);
     }
