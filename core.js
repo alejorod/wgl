@@ -85,16 +85,18 @@ function deleteBuffer(gl, buffer) {
 function createVAO(gl, data) {
     const buffers = [];
     const vao = gl.createVertexArray();
+    let count = 0;
     gl.bindVertexArray(vao);
     data.forEach((d, i) => {
         buffers.push(createBuffer(gl, d));
         const vlength = d[0].length;
         gl.enableVertexAttribArray(i);
         gl.vertexAttribPointer(i, vlength, gl.FLOAT, false, 0, 0);
+        count = d.length;
     });
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindVertexArray(null);
-    return {id: vao, buffers: buffers};
+    return {id: vao, buffers: buffers, count: count};
 }
 
 function deleteVAO(gl, vao) {
@@ -107,5 +109,5 @@ function setUniforms(gl, program, uniforms) {}
 function draw(gl, program, vao, uniforms) {
     gl.useProgram(program);
     gl.bindVertexArray(vao.id);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.drawArrays(gl.TRIANGLES, 0, vao.count);
 }
