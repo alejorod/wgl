@@ -4,7 +4,8 @@ function loadSrc(path) {
     return fetch(path).then(r => r.text());
 }
 
-function createVAOfromOBJ(gl, src) {
+
+function parseOBJ(src) {
     const vertices = [];
     const normals = [];
     const uvs = [];
@@ -42,7 +43,12 @@ function createVAOfromOBJ(gl, src) {
             buffers[2].push(uvs[Number(indexes[1]) - 1]);
         });
     });
-    return createVAO(gl, buffers);
+
+    return buffers;
+}
+
+function createVAOfromOBJ(gl, src) {
+    return createVAO(gl, parseOBJ(src));
 }
 
 function loop(cb) {
@@ -66,7 +72,9 @@ const keyboard = (function() {
         37: 'left',
         39: 'right',
         40: 'down',
-        38: 'up'
+        38: 'up',
+        87: 'w',
+        83: 's'
     };
 
     window.onkeydown = (e) => { state[mapk[e.keyCode]] = true; }
@@ -96,6 +104,14 @@ class OrbitCamera {
 
         if (keyboard.down) {
             this.rx += Math.PI * delta;
+        }
+
+        if (keyboard.s) {
+            this.r += 2 * delta;
+        }
+
+        if (keyboard.w) {
+            this.r -= 2 * delta;
         }
     }
 

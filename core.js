@@ -88,8 +88,9 @@ function deleteBuffer(gl, buffer) {
     gl.deleteBuffer(buffer);
 }
 
-function createVAO(gl, data) {
+function createVAO(gl, data, instanceData=[]) {
     const buffers = [];
+    const ibuffers = [];
     const vao = gl.createVertexArray();
     let count = 0;
     gl.bindVertexArray(vao);
@@ -100,13 +101,66 @@ function createVAO(gl, data) {
         gl.vertexAttribPointer(i, vlength, gl.FLOAT, false, 0, 0);
         count = d.length;
     });
+
+    let ioffset = data.length;
+    let icount = 0;
+    instanceData.forEach((d, i) => {
+        ibuffers.push(createBuffer(gl, d));
+        const vlength = d[0].length;
+        
+        if (!icount || d.length < icount) {
+            icount = d.length;
+        }
+
+        if (vlength == 16) {
+            const vec4size = 4 * Float32Array.BYTES_PER_ELEMENT;
+            const strideSize = 4 * vec4size;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 4, gl.FLOAT, false, strideSize, 0);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 4, gl.FLOAT, false, strideSize, vec4size);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 4, gl.FLOAT, false, strideSize, 2 * vec4size);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 4, gl.FLOAT, false, strideSize, 3 * vec4size);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+        } else if (vlength == 9) {
+            const vec3size = 3 * Float32Array.BYTES_PER_ELEMENT;
+            const strideSize = 3 * vec3size;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 3, gl.FLOAT, false, strideSize, 0);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 3, gl.FLOAT, false, strideSize, vec3size);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 3, gl.FLOAT, false, strideSize, 2 * vec3size);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+        } else {
+            gl.enableVertexAttribArray(ioffset);
+            gl.vertexAttribPointer(ioffset, vlength, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(ioffset, 1);
+        }
+    });
+
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindVertexArray(null);
-    return {id: vao, buffers: buffers, count: count};
+    return {id: vao, buffers: buffers, ibuffers: ibuffers, count: count, maxInstances: icount};
 }
 
 function deleteVAO(gl, vao) {
     vao.buffers.forEach(b => deleteBuffer(gl, b));
+    vao.ibuffers.forEach(b => deleteBuffer(gl, b));
     gl.deleteVertexArray(vao.id);
 }
 
@@ -120,9 +174,14 @@ function setUniforms(gl, program, uniforms) {
     });
 }
 
-function draw(gl, program, vao, uniforms) {
+function draw(gl, program, vao, uniforms, count=0) {
     gl.useProgram(program.id);
     setUniforms(gl, program, uniforms);
     gl.bindVertexArray(vao.id);
+
+    
+    if (vao.maxInstances && count) {
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, vao.count, Math.min(vao.maxInstances, count));
+    }
     gl.drawArrays(gl.TRIANGLES, 0, vao.count);
 }
