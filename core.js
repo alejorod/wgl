@@ -50,10 +50,15 @@ function deleteShader(gl, shader) {
     gl.deleteShader(shader);
 }
 
-function createProgram(gl, vshader, fshader, uniforms=[]) {
+function createProgram(gl, vshader, fshader, uniforms=[], feedbacks=[]) {
     const program = gl.createProgram();
     gl.attachShader(program, vshader);
     gl.attachShader(program, fshader);
+
+    if (feedbacks && feedbacks.length) {
+        gl.transformFeedbackVaryings(program, feedbacks, gl.SEPARATE_ATTRIBS);
+    }
+
     gl.linkProgram(program);
     const success = gl.getProgramParameter(program, gl.LINK_STATUS);
     if (success) {
@@ -76,16 +81,30 @@ function deleteProgram(gl, program) {
 
 function createBuffer(gl, data) {
     const buffer = gl.createBuffer();
-    const pdata = data.reduce((p, c) => {
-        return p.concat(c);
-    }, []);
+    const pdata = [];
+    for (let i = 0; i < data.length; i++) {
+        for (let idx = 0; idx < data[i].length; idx++) {
+            pdata.push(data[i][idx]);
+        }
+    }
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pdata), gl.STATIC_DRAW);
-    return buffer;
+    return {
+        id: buffer,
+        elementSize: data[0].length * Float32Array.BYTES_PER_ELEMENT,
+        elementLength: data[0].length,
+        count: data.length,
+    };
+}
+
+function updateBuffer(gl, buffer, idx, data) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer.id);
+    gl.bufferSubData(gl.ARRAY_BUFFER, idx * buffer.elementSize, new Float32Array(data));
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
 }
 
 function deleteBuffer(gl, buffer) {
-    gl.deleteBuffer(buffer);
+    gl.deleteBuffer(buffer.id);
 }
 
 function createVAO(gl, data, instanceData=[]) {
@@ -158,6 +177,74 @@ function createVAO(gl, data, instanceData=[]) {
     return {id: vao, buffers: buffers, ibuffers: ibuffers, count: count, maxInstances: icount};
 }
 
+function createVAOFromBuffers(gl, buffers, instanceBuffers=[]) {
+    const vao = gl.createVertexArray();
+    let count = 0;
+    gl.bindVertexArray(vao);
+    buffers.forEach((b, i) => {
+        gl.bindBuffer(gl.ARRAY_BUFFER, b.id)
+        gl.enableVertexAttribArray(i);
+        gl.vertexAttribPointer(i, b.elementLength, gl.FLOAT, false, 0, 0);
+        count = b.count;
+    });
+
+    let ioffset = buffers.length;
+    let icount = 0;
+    instanceBuffers.forEach(b => {
+        gl.bindBuffer(gl.ARRAY_BUFFER, b.id);
+        const vlength = b.elementLength;
+        
+        if (!icount || b.count < icount) {
+            icount = b.count;
+        }
+
+        if (vlength == 16) {
+            const vec4size = 4 * Float32Array.BYTES_PER_ELEMENT;
+            const strideSize = 4 * vec4size;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 4, gl.FLOAT, false, strideSize, 0);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 4, gl.FLOAT, false, strideSize, vec4size);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 4, gl.FLOAT, false, strideSize, 2 * vec4size);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 4, gl.FLOAT, false, strideSize, 3 * vec4size);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+        } else if (vlength == 9) {
+            const vec3size = 3 * Float32Array.BYTES_PER_ELEMENT;
+            const strideSize = 3 * vec3size;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 3, gl.FLOAT, false, strideSize, 0);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 3, gl.FLOAT, false, strideSize, vec3size);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+            gl.enableVertexAttribArray(ioffset); 
+            gl.vertexAttribPointer(ioffset, 3, gl.FLOAT, false, strideSize, 2 * vec3size);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+        } else {
+            gl.enableVertexAttribArray(ioffset);
+            gl.vertexAttribPointer(ioffset, vlength, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(ioffset, 1);
+            ioffset += 1;
+        }
+    });
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindVertexArray(null);
+    return {id: vao, buffers: buffers, ibuffers: instanceBuffers, count: count, maxInstances: icount};
+}
+
 function deleteVAO(gl, vao) {
     vao.buffers.forEach(b => deleteBuffer(gl, b));
     vao.ibuffers.forEach(b => deleteBuffer(gl, b));
@@ -170,6 +257,8 @@ function setUniforms(gl, program, uniforms) {
         const loc = program.locations[k];
         if (data.length && data.length == 16) {
             gl.uniformMatrix4fv(loc, false, data);
+        } else {
+            gl.uniform1f(loc, data);
         }
     });
 }
@@ -179,9 +268,25 @@ function draw(gl, program, vao, uniforms, count=0) {
     setUniforms(gl, program, uniforms);
     gl.bindVertexArray(vao.id);
 
-    
     if (vao.maxInstances && count) {
         gl.drawArraysInstanced(gl.TRIANGLES, 0, vao.count, Math.min(vao.maxInstances, count));
     }
     gl.drawArrays(gl.TRIANGLES, 0, vao.count);
+}
+
+function drawFeedback(gl, program, vaoA, targets, uniforms, count=0) {
+    gl.useProgram(program.id);
+    setUniforms(gl, program, uniforms);
+    gl.bindVertexArray(vaoA.id);
+    targets.forEach((t, i) => {
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, i, t.id);
+    });
+    gl.beginTransformFeedback(gl.TRIANGLES);
+    if (vaoA.maxInstances && count) {
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, vaoA.count, Math.min(vaoA.maxInstances, count));
+    } else {
+        gl.drawArrays(gl.TRIANGLES, 0, vaoA.count);
+    }
+    gl.endTransformFeedback();
+    gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
 }
