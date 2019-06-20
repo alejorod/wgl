@@ -50,7 +50,7 @@ function deleteShader(gl, shader) {
     gl.deleteShader(shader);
 }
 
-function createProgram(gl, vshader, fshader, uniforms=[], feedbacks=[]) {
+function createProgram(gl, vshader, fshader, uniforms=[], feedbacks=[], mode=null) {
     const program = gl.createProgram();
     gl.attachShader(program, vshader);
     gl.attachShader(program, fshader);
@@ -67,7 +67,8 @@ function createProgram(gl, vshader, fshader, uniforms=[], feedbacks=[]) {
             locations: uniforms.reduce((p, c) => {
                 p[c] = gl.getUniformLocation(program, c);
                 return p;
-            }, {})
+            }, {}),
+            mode: mode !== null ? mode : gl.TRIANGLES
         };
     }
     
@@ -269,24 +270,23 @@ function draw(gl, program, vao, uniforms, count=0) {
     gl.bindVertexArray(vao.id);
 
     if (vao.maxInstances && count) {
-        gl.drawArraysInstanced(gl.TRIANGLES, 0, vao.count, Math.min(vao.maxInstances, count));
+        gl.drawArraysInstanced(program.mode, 0, vao.count, Math.min(vao.maxInstances, count));
+    } else {
+        gl.drawArrays(program.mode, 0, vao.count);
     }
-    gl.drawArrays(gl.TRIANGLES, 0, vao.count);
 }
 
-function drawFeedback(gl, program, vaoA, targets, uniforms, count=0) {
+function drawFeedback(gl, program, vao, targets, uniforms) {
     gl.useProgram(program.id);
     setUniforms(gl, program, uniforms);
-    gl.bindVertexArray(vaoA.id);
+    gl.bindVertexArray(vao.id);
     targets.forEach((t, i) => {
         gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, i, t.id);
     });
-    gl.beginTransformFeedback(gl.TRIANGLES);
-    if (vaoA.maxInstances && count) {
-        gl.drawArraysInstanced(gl.TRIANGLES, 0, vaoA.count, Math.min(vaoA.maxInstances, count));
-    } else {
-        gl.drawArrays(gl.TRIANGLES, 0, vaoA.count);
-    }
+    gl.enable(gl.RASTERIZER_DISCARD);
+    gl.beginTransformFeedback(gl.POINTS);
+    gl.drawArrays(gl.POINTS, 0, vao.count);
     gl.endTransformFeedback();
     gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+    gl.disable(gl.RASTERIZER_DISCARD);
 }
