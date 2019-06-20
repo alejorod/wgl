@@ -52,15 +52,15 @@ function createVAOfromOBJ(gl, src) {
 }
 
 function loop(cb) {
-    let last;
+    let last = null;
     let delta;
 
     function main(time) {
         requestAnimationFrame(main);
-        last = last || time;
+        last = last == null ? time : last;
         delta = (time - last) / 1000;
         last = time;
-        cb(delta);
+        cb(delta, time / 1000);
     }
 
     requestAnimationFrame(main);
