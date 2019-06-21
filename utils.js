@@ -123,3 +123,88 @@ class OrbitCamera {
         return glMatrix.mat4.lookAt([], [x, y, z], [0, 0, 0], [0, 1, 0]);
     }
 }
+
+
+class FeedbackParticlesSystem {
+    constructor({
+        gl,
+        updateProgram,
+        renderProgram,
+        mesh,
+        dynamicProperties,
+        fixedProperties
+    }) {
+        this.feedbackProgram = updateProgram;
+        this.renderProgram = renderProgram;
+        this.mesh = mesh;
+        this.dynamicProperties = dynamicProperties;
+        this.fixedProperties = fixedProperties;
+        this.state = {};
+        this.initState(gl);
+    }
+
+    initState(gl) {
+        const buffersA = this.dynamicProperties.map(p => createBuffer(gl, p));
+        const buffersB = this.dynamicProperties.map(p => createBuffer(gl, p));
+        const dBufferA = buffersA.map(b => b);
+        const dBufferB = buffersB.map(b => b);
+
+        this.fixedProperties.forEach(p => {
+            const b = createBuffer(gl, p);
+            buffersA.push(b);
+            buffersB.push(b);
+        });
+
+        const vaoA = createVAOFromBuffers(gl, buffersA);
+        const vaoB = createVAOFromBuffers(gl, buffersB);
+        const vaoRA = createVAOFromBuffers(gl, [this.mesh], buffersA);
+        const vaoRB = createVAOFromBuffers(gl, [this.mesh], buffersB);
+
+        this.state = {
+            read: {
+                feedback: vaoA,
+                render: vaoRA,
+                buffers: dBufferA
+            },
+            write: {
+                feedback: vaoB,
+                render: vaoRB,
+                buffers: dBufferB
+            }
+        };
+    }
+
+    update(gl, uniforms, swap=false) {
+        drawFeedback(
+            gl,
+            this.feedbackProgram,
+            this.state.read.feedback,
+            this.state.write.buffers,
+            uniforms
+        );
+
+        if (swap) {
+            this.swap();
+        }
+    }
+
+    render(gl, uniforms, swap=true) {
+        draw(
+            gl,
+            this.renderProgram,
+            this.state.read.render,
+            uniforms,
+            this.state.read.render.maxInstances
+        );
+
+        if (swap) {
+            this.swap();
+        }
+    }
+
+    swap() {
+        const tmp = this.state.read;
+        this.state.read = this.state.write;
+        this.state.write = tmp;
+    }
+}

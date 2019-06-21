@@ -18,6 +18,11 @@ function clear(gl) {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 }
 
+function enableAlpha(gl) {
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
+}
+
 const V_SHADER = 0;
 const F_SHADER = 1;
 const M_POINTS = 0;
