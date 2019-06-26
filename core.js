@@ -1,4 +1,4 @@
-function getContext(canvas, config) {
+function getContext(canvas, config={}) {
     const gl = canvas.getContext('webgl2');
     const clear = config.clear || [0.0, 0.0, 0.0, 1.0];
     const viewport = config.viewport || [0, 0, canvas.width, canvas.height];
@@ -25,11 +25,74 @@ function enableAlpha(gl) {
 
 const V_SHADER = 0;
 const F_SHADER = 1;
+
 const M_POINTS = 0;
 const M_TRIANGLES = 1;
 
-function createTexture() {}
-function deleteTexture(gl, texture) {}
+const W_REPEAT          = 0;
+const W_MIRRORED_REPEAT = 1;
+const W_CLAMP_TO_EDGE   = 2;
+const W_CLAMP_TO_BORDER = 3;
+const F_NONE    = 0;
+const F_LINEAR  = 1;
+const F_NEAREST = 2;
+const T_RGB  = 0;
+const T_RGBA = 1;
+
+const WRAP_MAP = {
+    [W_REPEAT]: 'REPEAT',
+    [W_MIRRORED_REPEAT]: 'MIRRORED_REPEAT',
+    [W_CLAMP_TO_BORDER]: 'CLAMP_TO_BORDER',
+    [W_CLAMP_TO_EDGE]: 'CLAMP_TO_EDGE'
+};
+
+const MIPMAP_MAP = {
+    [F_NONE]: '',
+    [F_LINEAR]: '_MIPMAP_LINEAR',
+    [F_NEAREST]: '_MIPMAP_NEAREST'
+};
+const FILTER_MAP = {
+    [F_LINEAR]: 'LINEAR',
+    [F_NEAREST]: 'NEAREST'
+};
+
+function createTexture(gl, image, props) {
+    const config = Object.assign({
+        format: T_RGB,
+        wrapS: W_REPEAT,
+        wrapT: W_REPEAT,
+        mipmaps: F_NONE,
+        minFilter: F_LINEAR,
+        maxFilter: F_LINEAR
+    }, props);
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    const format = config.format == T_RGB ? gl.RGB : gl.RGBA;
+    const wrapS = gl[WRAP_MAP[config.wrapS]];
+    const wrapT = gl[WRAP_MAP[config.wrapT]];
+    const minFilter = gl[`${FILTER_MAP[config.minFilter]}${MIPMAP_MAP[config.mipmaps]}`];
+    const maxFilter = gl[FILTER_MAP[config.maxFilter]];
+
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapS);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, maxFilter);
+
+    gl.texImage2D(gl.TEXTURE_2D, 0, format, format, gl.UNSIGNED_BYTE, image);
+
+    if (config.mipmaps !== F_NONE) {
+        gl.generateMipmap(gl.TEXTURE_2D);
+    }
+
+    return {
+        id: texture
+    };
+}
+
+function deleteTexture(gl, texture) {
+    gl.deleteTexture(texture.id);
+}
 
 function createShader(gl, src, type) {
     const stype = type == V_SHADER 
@@ -260,10 +323,16 @@ function deleteVAO(gl, vao) {
 }
 
 function setUniforms(gl, program, uniforms) {
+    let unit = 0;
     Object.keys(program.locations).forEach(k => {
         const data = uniforms[k];
         const loc = program.locations[k];
-        if (data.length && data.length == 16) {
+        if (data.id) {
+            gl.activeTexture(gl.TEXTURE0 + unit);
+            gl.bindTexture(gl.TEXTURE_2D, data.id);
+            gl.uniform1i(loc, unit);
+            unit += 1;
+        } else if (data.length && data.length == 16) {
             gl.uniformMatrix4fv(loc, false, data);
         } else {
             gl.uniform1f(loc, data);

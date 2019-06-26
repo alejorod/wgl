@@ -1,9 +1,16 @@
-function loadImg() {}
+function loadImg(path) {
+    return new Promise((resolve) => {
+        const image = new Image();
+        image.onload = (e) => {
+            resolve(image);
+        };
+        image.src = path;
+    });
+}
 
 function loadSrc(path) {
     return fetch(path).then(r => r.text());
 }
-
 
 function parseOBJ(src) {
     const vertices = [];
