@@ -226,7 +226,30 @@ function createProgram(gl, vshader, fshader, uniforms=[], feedbacks=[], mode=nul
         return {
             id: program,
             locations: uniforms.reduce((p, c) => {
-                p[c] = gl.getUniformLocation(program, c);
+                if (c.name) {
+                    if (c.count) {
+                        for (let i = 0; i < c.count; i++) {
+                            if (c.fields) {
+                                c.fields.forEach(f => {
+                                    const name = `${c.name}[${i}].${f}`;
+                                    p[name] = gl.getUniformLocation(program, name);
+                                });
+                            } else {
+                                const name = `${c.name}[${i}]`;
+                                p[name] = gl.getUniformLocation(program, name);
+                            }
+                        }
+                    } else if (c.fields) {
+                        c.fields.forEach(f => {
+                            const name = `${c.name}.${f}`;
+                            p[name] =  gl.getUniformLocation(program, name);
+                        });
+                    } else {
+                        p[c] = gl.getUniformLocation(program, c.name);
+                    }
+                } else {
+                    p[c] = gl.getUniformLocation(program, c);
+                }
                 return p;
             }, {}),
             mode: mode === M_POINTS ? gl.POINTS : gl.TRIANGLES
@@ -413,21 +436,86 @@ function deleteVAO(gl, vao) {
     gl.deleteVertexArray(vao.id);
 }
 
+function isArrayUniform(val) {
+    if (!val.length) { return false; }
+    return !(isIntegerUniform(val[0]) || isFloatUniform(val[0]));
+}
+
+function isStructUniform(val) {
+    const type = typeof val;
+    return type === 'object';
+}
+
+function isIntegerUniform(val) {
+    return Number.isInteger(val);
+}
+
+function isFloatUniform(val) {
+    return !Number.isNaN(parseFloat(val));
+}
+
+function isVectorUniform(val) {
+    if (!val.length) { return false; }
+    return (isIntegerUniform(val[0]) || isFloatUniform(val[0]));
+}
+
+function isTextureUniform(val) {
+    return Boolean(val.id);
+}
+
+function setUniform(gl, program, location, val, unit=0) {
+    const loc = program.locations[location];
+    let textureOffset = 0;
+
+    if (isArrayUniform(val)) {
+        val.forEach((v, i) => {
+            textureOffset += texturesetUniform(
+                gl,
+                program,
+                `${location}[${i}]`,
+                v,
+                unit + textureOffset
+            );
+        })
+    } else if (isStructUniform(val)) {
+        Object.keys(val).forEach(k => {
+            textureOffset += setUniform(
+                gl,
+                program,
+                `${location}.${k}`,
+                val[k],
+                unit + textureOffset
+            );
+        });
+    } else if (loc) {
+        if (isIntegerUniform(val)) {
+            gl.uniform1i(loc, val);
+        } else if (isFloatUniform(val)) {
+            gl.uniform1f(loc, val);
+        } else if (isTextureUniform(val)) {
+            gl.activeTexture(gl.TEXTURE0 + unit);
+            gl.bindTexture(gl.TEXTURE_2D, val.id);
+            gl.uniform1i(loc, unit);
+            textureOffset += 1;
+        } else if (isVectorUniform(val) ) {
+            if (val.length == 16) {
+                gl.uniformMatrix4fv(loc, false, data);
+            } else if (val.length == 9) {
+                gl.uniformMatrix3fv(loc, false, data);
+            } else {
+                gl[`uniform${val.length}fv`](loc, data);
+            }
+        }
+    }
+
+    return textureOffset;
+}
+
 function setUniforms(gl, program, uniforms) {
     let unit = 0;
-    Object.keys(program.locations).forEach(k => {
+    Object.keys(uniforms).forEach(k => {
         const data = uniforms[k];
-        const loc = program.locations[k];
-        if (data.id) {
-            gl.activeTexture(gl.TEXTURE0 + unit);
-            gl.bindTexture(gl.TEXTURE_2D, data.id);
-            gl.uniform1i(loc, unit);
-            unit += 1;
-        } else if (data.length && data.length == 16) {
-            gl.uniformMatrix4fv(loc, false, data);
-        } else {
-            gl.uniform1f(loc, data);
-        }
+        unit += setUniform(gl, program, k, data, unit);
     });
 }
 
