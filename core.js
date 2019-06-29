@@ -38,6 +38,7 @@ const F_LINEAR  = 1;
 const F_NEAREST = 2;
 const T_RGB  = 0;
 const T_RGBA = 1;
+const T_DEPTH_STENCIL = 2;
 
 const WRAP_MAP = {
     [W_REPEAT]: 'REPEAT',
@@ -58,17 +59,29 @@ const FILTER_MAP = {
 
 function createTexture(gl, image, props) {
     const config = Object.assign({
+        width: 0,
+        height: 0,
         format: T_RGB,
         wrapS: W_REPEAT,
         wrapT: W_REPEAT,
         mipmaps: F_NONE,
         minFilter: F_LINEAR,
-        maxFilter: F_LINEAR
+        maxFilter: F_LINEAR,
     }, props);
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
-    const format = config.format == T_RGB ? gl.RGB : gl.RGBA;
+    const iformat = config.format == T_RGB 
+        ? gl.RGB
+        : config.format == T_RGBA
+        ? gl.RGBA
+        : gl.DEPTH24_STENCIL8;
+    const format = config.format == T_RGB 
+        ? gl.RGB
+        : config.format == T_RGBA
+        ? gl.RGBA
+        : gl.DEPTH_STENCIL;
+    const type = config.format == T_DEPTH_STENCIL ? gl.UNSIGNED_INT_24_8 : gl.UNSIGNED_BYTE;
     const wrapS = gl[WRAP_MAP[config.wrapS]];
     const wrapT = gl[WRAP_MAP[config.wrapT]];
     const minFilter = gl[`${FILTER_MAP[config.minFilter]}${MIPMAP_MAP[config.mipmaps]}`];
@@ -79,7 +92,11 @@ function createTexture(gl, image, props) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, maxFilter);
 
-    gl.texImage2D(gl.TEXTURE_2D, 0, format, format, gl.UNSIGNED_BYTE, image);
+    if (config.width || config.height) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, iformat, config.width, config.height, 0, format, type, image);
+    } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, iformat, format, type, image);
+    }
 
     if (config.mipmaps !== F_NONE) {
         gl.generateMipmap(gl.TEXTURE_2D);
@@ -92,6 +109,80 @@ function createTexture(gl, image, props) {
 
 function deleteTexture(gl, texture) {
     gl.deleteTexture(texture.id);
+}
+
+function createRenderBuffer(gl, w, h) {
+    const rbo = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, rbo);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, w, h);
+    return rbo;
+}
+
+function deleteRenderBuffer(gl, rbo) {
+    gl.deleteRenderbuffer(rbo);
+}
+
+function createFBO(gl, w, h, count=1, depth=true, rbo=true) {
+    const fbo = gl.createFramebuffer();
+    const colorAttachments = [];
+    const buffers = [];
+    let depthS = null;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    
+    for (let i = 0; i < count; i++) {
+        const texture = createTexture(gl, null, {
+            width: w,
+            height: h
+        });
+        colorAttachments.push(texture);
+        buffers.push(gl.COLOR_ATTACHMENT0 + i);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, texture.id, 0);
+    }
+
+    if (depth) {
+        if (rbo) {
+            depthS = createRenderBuffer(gl, w, h);
+            gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, depthS);  
+        } else {
+            depthS = createTexture(gl, null, {
+                width: w,
+                height: h,
+                format: T_DEPTH_STENCIL
+            });
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, depthS.id, 0);  
+        }
+    }
+
+    return {
+        colors: colorAttachments,
+        buffers: buffers,
+        depth: depthS,
+        rbo: rbo,
+        id: fbo
+    };
+}
+
+function useFBO(gl, fbo) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo ? fbo.id : null);
+
+    if (fbo) {
+        gl.drawBuffers(fbo.buffers);
+    }
+}
+
+function deleteFBO(gl, fbo) {
+    fbo.colors.forEach(c => {
+        deleteTexture(gl, c);
+    });
+
+    if (fbo.depth) {
+        if (fbo.rbo) {
+            deleteRenderBuffer(gl, fbo.depth);
+        } else {
+            deleteTexture(gl, fbo.depth);
+        }
+    }
 }
 
 function createShader(gl, src, type) {
