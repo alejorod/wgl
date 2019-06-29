@@ -4,6 +4,11 @@ function getContext(canvas, config={}) {
     const viewport = config.viewport || [0, 0, canvas.width, canvas.height];
     updateClearColor(gl, clear[0], clear[1], clear[2], clear[3] || 0.0);
     updateViewPort(gl, viewport[0], viewport[1], viewport[2], viewport[3]);
+
+    if (!gl.getExtension('EXT_color_buffer_float')) {
+        console.error('no HDR support!');
+    }
+    
     return gl;
 }
 
@@ -38,7 +43,8 @@ const F_LINEAR  = 1;
 const F_NEAREST = 2;
 const T_RGB  = 0;
 const T_RGBA = 1;
-const T_DEPTH_STENCIL = 2;
+const T_RGBA16 = 2;
+const T_DEPTH_STENCIL = 3;
 
 const WRAP_MAP = {
     [W_REPEAT]: 'REPEAT',
@@ -52,36 +58,48 @@ const MIPMAP_MAP = {
     [F_LINEAR]: '_MIPMAP_LINEAR',
     [F_NEAREST]: '_MIPMAP_NEAREST'
 };
+
 const FILTER_MAP = {
     [F_LINEAR]: 'LINEAR',
     [F_NEAREST]: 'NEAREST'
+};
+
+const INTERNAL_FORMAT_MAP = {
+    [T_RGB]: 'RGB',
+    [T_RGBA]: 'RGBA',
+    [T_RGBA16]: 'RGBA16F',
+    [T_DEPTH_STENCIL]: 'DEPTH24_STENCIL8'
+};
+
+const FORMAT_MAP = {
+    [T_RGB]: 'RGB',
+    [T_RGBA]: 'RGBA',
+    [T_DEPTH_STENCIL]: 'DEPTH_STENCIL'
 };
 
 function createTexture(gl, image, props) {
     const config = Object.assign({
         width: 0,
         height: 0,
+        internal: T_RGB,
         format: T_RGB,
         wrapS: W_REPEAT,
         wrapT: W_REPEAT,
         mipmaps: F_NONE,
         minFilter: F_LINEAR,
         maxFilter: F_LINEAR,
+        gamma: false
     }, props);
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
-    const iformat = config.format == T_RGB 
-        ? gl.RGB
-        : config.format == T_RGBA
-        ? gl.RGBA
-        : gl.DEPTH24_STENCIL8;
-    const format = config.format == T_RGB 
-        ? gl.RGB
-        : config.format == T_RGBA
-        ? gl.RGBA
-        : gl.DEPTH_STENCIL;
-    const type = config.format == T_DEPTH_STENCIL ? gl.UNSIGNED_INT_24_8 : gl.UNSIGNED_BYTE;
+    const iformat = `${config.gamma ? 'S':''}${INTERNAL_FORMAT_MAP[config.internal]}`;
+    const format = FORMAT_MAP[config.format];
+    const type = config.format == T_DEPTH_STENCIL 
+        ? gl.UNSIGNED_INT_24_8 
+        : config.internal == T_RGBA16
+        ? gl.HALF_FLOAT
+        : gl.UNSIGNED_BYTE;
     const wrapS = gl[WRAP_MAP[config.wrapS]];
     const wrapT = gl[WRAP_MAP[config.wrapT]];
     const minFilter = gl[`${FILTER_MAP[config.minFilter]}${MIPMAP_MAP[config.mipmaps]}`];
@@ -93,9 +111,9 @@ function createTexture(gl, image, props) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, maxFilter);
 
     if (config.width || config.height) {
-        gl.texImage2D(gl.TEXTURE_2D, 0, iformat, config.width, config.height, 0, format, type, image);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl[iformat], config.width, config.height, 0, gl[format], type, image);
     } else {
-        gl.texImage2D(gl.TEXTURE_2D, 0, iformat, format, type, image);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl[iformat], gl[format], type, image);
     }
 
     if (config.mipmaps !== F_NONE) {
@@ -122,7 +140,7 @@ function deleteRenderBuffer(gl, rbo) {
     gl.deleteRenderbuffer(rbo);
 }
 
-function createFBO(gl, w, h, count=1, depth=true, rbo=true) {
+function createFBO({gl, width, height, count=1, depth=true, rbo=true, hdr=false}) {
     const fbo = gl.createFramebuffer();
     const colorAttachments = [];
     const buffers = [];
@@ -130,11 +148,18 @@ function createFBO(gl, w, h, count=1, depth=true, rbo=true) {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     
+    const colorProps = {
+        width: width,
+        height: height
+    };
+
+    if (hdr) {
+        colorProps['internal'] = T_RGBA16;
+        colorProps['format'] = T_RGBA;
+    }
+
     for (let i = 0; i < count; i++) {
-        const texture = createTexture(gl, null, {
-            width: w,
-            height: h
-        });
+        const texture = createTexture(gl, null, colorProps);
         colorAttachments.push(texture);
         buffers.push(gl.COLOR_ATTACHMENT0 + i);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, texture.id, 0);
@@ -142,7 +167,7 @@ function createFBO(gl, w, h, count=1, depth=true, rbo=true) {
 
     if (depth) {
         if (rbo) {
-            depthS = createRenderBuffer(gl, w, h);
+            depthS = createRenderBuffer(gl, width, height);
             gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, depthS);  
         } else {
             depthS = createTexture(gl, null, {
@@ -443,7 +468,7 @@ function isArrayUniform(val) {
 
 function isStructUniform(val) {
     const type = typeof val;
-    return type === 'object';
+    return type === 'object' && !val.length;
 }
 
 function isIntegerUniform(val) {
@@ -451,6 +476,7 @@ function isIntegerUniform(val) {
 }
 
 function isFloatUniform(val) {
+    if (val.length) { return false; }
     return !Number.isNaN(parseFloat(val));
 }
 
@@ -469,7 +495,7 @@ function setUniform(gl, program, location, val, unit=0) {
 
     if (isArrayUniform(val)) {
         val.forEach((v, i) => {
-            textureOffset += texturesetUniform(
+            textureOffset += setUniform(
                 gl,
                 program,
                 `${location}[${i}]`,
@@ -491,6 +517,9 @@ function setUniform(gl, program, location, val, unit=0) {
         if (isIntegerUniform(val)) {
             gl.uniform1i(loc, val);
         } else if (isFloatUniform(val)) {
+            if (val.length) {
+                debugger;
+            }
             gl.uniform1f(loc, val);
         } else if (isTextureUniform(val)) {
             gl.activeTexture(gl.TEXTURE0 + unit);
@@ -499,11 +528,11 @@ function setUniform(gl, program, location, val, unit=0) {
             textureOffset += 1;
         } else if (isVectorUniform(val) ) {
             if (val.length == 16) {
-                gl.uniformMatrix4fv(loc, false, data);
+                gl.uniformMatrix4fv(loc, false, val);
             } else if (val.length == 9) {
-                gl.uniformMatrix3fv(loc, false, data);
+                gl.uniformMatrix3fv(loc, false, val);
             } else {
-                gl[`uniform${val.length}fv`](loc, data);
+                gl[`uniform${val.length}fv`](loc, val);
             }
         }
     }
