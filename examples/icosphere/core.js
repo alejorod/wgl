@@ -24,7 +24,7 @@ function clear(gl) {
 }
 
 function enableAlpha(gl) {
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.SRC_ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);
 }
 
@@ -83,8 +83,8 @@ function createTexture(gl, image, props) {
         height: 0,
         internal: T_RGB,
         format: T_RGB,
-        wrapS: W_REPEAT,
-        wrapT: W_REPEAT,
+        wrapS: W_CLAMP_TO_EDGE,
+        wrapT: W_CLAMP_TO_EDGE,
         mipmaps: F_NONE,
         minFilter: F_LINEAR,
         maxFilter: F_LINEAR,
@@ -178,6 +178,8 @@ function createFBO({gl, width, height, count=1, depth=true, rbo=true, hdr=false}
             gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, depthS.id, 0);  
         }
     }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     return {
         colors: colorAttachments,
@@ -398,7 +400,7 @@ function isArrayUniform(val) {
 
 function isStructUniform(val) {
     const type = typeof val;
-    return type === 'object' && !val.length;
+    return type === 'object';
 }
 
 function isIntegerUniform(val) {
@@ -423,7 +425,28 @@ function setUniform(gl, program, location, val, unit=0) {
     const loc = program.locations[location];
     let textureOffset = 0;
 
-    if (isArrayUniform(val)) {
+    // order of checks is important!
+
+    if (loc) {
+        if (isIntegerUniform(val)) {
+            gl.uniform1i(loc, val);
+        } else if (isFloatUniform(val)) {
+            gl.uniform1f(loc, val);
+        } else if (isTextureUniform(val)) {
+            gl.activeTexture(gl.TEXTURE0 + unit);
+            gl.bindTexture(gl.TEXTURE_2D, val.id);
+            gl.uniform1i(loc, unit);
+            textureOffset += 1;
+        } else if (isVectorUniform(val) ) {
+            if (val.length == 16) {
+                gl.uniformMatrix4fv(loc, false, val);
+            } else if (val.length == 9) {
+                gl.uniformMatrix3fv(loc, false, val);
+            } else {
+                gl[`uniform${val.length}fv`](loc, val);
+            }
+        }
+    } else if (isArrayUniform(val)) {
         val.forEach((v, i) => {
             textureOffset += setUniform(
                 gl,
@@ -443,28 +466,6 @@ function setUniform(gl, program, location, val, unit=0) {
                 unit + textureOffset
             );
         });
-    } else if (loc) {
-        if (isIntegerUniform(val)) {
-            gl.uniform1i(loc, val);
-        } else if (isFloatUniform(val)) {
-            if (val.length) {
-                debugger;
-            }
-            gl.uniform1f(loc, val);
-        } else if (isTextureUniform(val)) {
-            gl.activeTexture(gl.TEXTURE0 + unit);
-            gl.bindTexture(gl.TEXTURE_2D, val.id);
-            gl.uniform1i(loc, unit);
-            textureOffset += 1;
-        } else if (isVectorUniform(val) ) {
-            if (val.length == 16) {
-                gl.uniformMatrix4fv(loc, false, val);
-            } else if (val.length == 9) {
-                gl.uniformMatrix3fv(loc, false, val);
-            } else {
-                gl[`uniform${val.length}fv`](loc, val);
-            }
-        }
     }
 
     return textureOffset;

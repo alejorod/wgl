@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body>
+    <canvas id="canvas" width="600" height="600"></canvas>
+    <script>
+        const ctx = canvas.getContext('2d');
+
+        const side = 20;
+        const width = 600;
+        const height = 600;
+        const wc = Math.floor(width / side);
+        const hc = Math.floor(height / side);
+        const data = [];
+        const cx = 300;
+        const cy = 300;
+        const r = 200;
+
+        function f(x, y) {
+            function intersectSDF(distA, distB) {
+                return Math.min(distA, distB);
+            }
+
+            function unionSDF(distA, distB) {
+                return Math.max(distA, distB);
+            }
+
+            function differenceSDF(distA, distB) {
+                return -Math.max(-distA, distB);
+            }
+            function outerC() {
+                return r - Math.sqrt(
+                    Math.pow(x * side - cx, 2) + 
+                    Math.pow(y * side - cy, 2)
+                );
+            }
+
+            function innerC() {
+                return r / 2 - Math.sqrt(
+                    Math.pow(x * side - cx, 2) + 
+                    Math.pow(y * side - cy, 2)
+                );
+            }
+
+            function inner2C() {
+                return r / 4 - Math.sqrt(
+                    Math.pow(x * side - cx, 2) + 
+                    Math.pow(y * side - cy, 2)
+                );
+            }
+
+            return unionSDF(inner2C(), differenceSDF(outerC(), innerC()));
+        }
+
+        for (let x = 0; x < width / side; x++) {
+            data.push([]);
+            for (let y = 0; y < height / side; y++) {
+                data[x][y] = f(x, y) > 0;
+            }
+        }
+
+        const cases = {
+            0: [],
+            15: [],
+            1: [[['x0y0', 'x1y0'], 0.0], [0.0, ['x0y0', 'x0y1']]],
+            14: [[0.0, ['x0y0', 'x0y1']], [['x0y0', 'x1y0'], 0.0]],
+            2: [[0.0, ['x0y0', 'x0y1']], [['x0y1', 'x1y1'], 1.0]],
+            13: [[['x0y1', 'x1y1'], 1.0], [0.0, ['x0y0', 'x0y1']]],
+            4: [[1.0, ['x1y0', 'x1y1']], [['x0y0', 'x1y0'], 0.0]],
+            11: [[['x0y0', 'x1y0'], 0.0], [1.0, ['x1y0', 'x1y1']]],
+            8: [[['x0y1', 'x1y1'], 1.0], [1.0, ['x1y0', 'x1y1']]],
+            7: [[1.0, ['x1y0', 'x1y1']], [['x0y1', 'x1y1'], 1.0]],
+            3: [[['x0y0', 'x1y0'], 0.0], [['x0y1', 'x1y1'], 1.0]],
+            12: [[['x0y1', 'x1y1'], 1.0], [['x0y0', 'x1y0'], 0.0]],
+            10: [[0.0, ['x0y0', 'x0y1']], [1.0, ['x1y0', 'x1y1']]],
+            5: [[1.0, ['x1y0', 'x1y1']], [0.0, ['x0y0', 'x0y1']]],
+            9: [[['x0y0', 'x1y0'], 0.0], [0.0, ['x0y0', 'x0y1']], [['x0y1', 'x1y1'], 1.0], [1.0, ['x1y0', 'x1y1']]],
+            6: [[1.0, ['x1y0', 'x1y1']], [['x0y0', 'x1y0'], 0.0], [0.0, ['x0y0', 'x0y1']], [['x0y1', 'x1y1'], 1.0]]
+        }
+
+        function getCase(x, y) {
+            const x0y0 = f(x + 0.0, y + 0.0);
+            const x0y1 = f(x + 0.0, y + 1.0);
+            const x1y0 = f(x + 1.0, y + 0.0);
+            const x1y1 = f(x + 1.0, y + 1.0);
+
+            return (
+                (x0y0 > 0 ? 1 : 0) + 
+                (x0y1 > 0 ? 2 : 0) +
+                (x1y0 > 0 ? 4 : 0) +
+                (x1y1 > 0 ? 8 : 0)
+            );
+        }
+
+        function getPoints(x, y) {
+            const x0y0 = f(x + 0.0, y + 0.0);
+            const x0y1 = f(x + 0.0, y + 1.0);
+            const x1y0 = f(x + 1.0, y + 0.0);
+            const x1y1 = f(x + 1.0, y + 1.0);
+            const data = {x0y0, x0y1, x1y0, x1y1};
+            const scase = (
+                (x0y0 > 0 ? 1 : 0) + 
+                (x0y1 > 0 ? 2 : 0) +
+                (x1y0 > 0 ? 4 : 0) +
+                (x1y1 > 0 ? 8 : 0)
+            );
+
+            return cases[scase].map(elem => {
+                return elem.map((i, idx) => {
+                    const base = idx == 0 ? x : y;
+                    if (Array.isArray(i)) {
+                        const v0 = data[i[0]];
+                        const v1 = data[i[1]];
+                        return (base + ((0 - v0) / (v1 - v0))) * side;
+                    } else {
+                        return (base + i) * side;
+                    }
+                })
+            });
+        }
+
+        const points = [];
+        
+        for (let x = 0; x < wc; x++) {
+            for (let y = 0; y < hc; y++) {
+                getPoints(x, y).forEach(p => {
+                    points.push(p);
+                });
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, width, height);
+
+            for (let x = 0; x < width / side; x++) {
+                ctx.strokeStyle = 'black';
+                ctx.beginPath();
+                ctx.moveTo(x * side, 0);
+                ctx.lineTo(x * side, height);
+                ctx.stroke();
+            }
+
+            for (let y = 0; y < height / side; y++) {
+                ctx.strokeStyle = 'black';
+                ctx.beginPath();
+                ctx.moveTo(0, y * side);
+                ctx.lineTo(width, y * side);
+                ctx.stroke();
+            }
+
+            data.forEach((row, x) => {
+                row.forEach((val, y) => {
+                    ctx.strokeStyle = 'black';
+                    ctx.beginPath();
+                    ctx.arc(x * side, y * side, 2, 0, Math.PI * 2);
+                    ctx.stroke();
+                    if (val) {
+                        ctx.fillStyle = 'black';
+                    } else {
+                        ctx.fillStyle = 'white';
+                    }
+                    ctx.fill();
+                    ctx.closePath();
+                });
+            });
+
+            ctx.strokeStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.stroke();
+
+            for (let i = 0; i < points.length; i += 2) {
+                ctx.strokeStyle = 'red';
+                ctx.beginPath();
+                ctx.moveTo(points[i][0], points[i][1]);
+                ctx.lineTo(points[i + 1][0], points[i + 1][1]);
+                ctx.stroke();
+            }
+            points.forEach(p => {
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                ctx.arc(p[0], p[1], 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // ctx.fillStyle = 'blue';
+
+            // const ccx = Math.floor(wc / 2);
+            // const ccy = Math.floor(hc / 2);
+            // ctx.fillRect(ccx * side, ccy * side, side, side);
+
+            // console.log(getCase(ccx, ccy));
+        }
+
+        draw();
+    </script>
+</body>
+</html>

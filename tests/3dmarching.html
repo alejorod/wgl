@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body>
+    <canvas width="600" height="600" id="canvas"></canvas>
+    <script src="glmatrix.js"></script>
+    <script src="noise.js"></script>
+    <script src="core.js"></script>
+    <script src="utils.js"></script>
+    <script src="marching.js"></script>
+    <script>
+        Promise.all([
+            loadSrc('vsrc.glsl'),
+            loadSrc('fsrc.glsl')
+        ]).then(res => {
+            const camera = new OrbitCamera();
+            camera.r = 40;
+            camera.rx = Math.PI / 4;
+            camera.ry = Math.PI / 4;
+            noise.seed(132);
+            const canvas = document.getElementById('canvas');
+            const gl = getContext(canvas, {
+                clear: [0.0, 0.0, 0.0, 1.0],
+                viewport: [0, 0, 600, 600]
+            });
+
+            enableDepth(gl);
+            // gl.enable(gl.CULL_FACE);
+
+
+            const vshader = createShader(gl, res[0], V_SHADER);
+            const fshader = createShader(gl, res[1], F_SHADER);
+            const program = createProgram(gl, vshader, fshader, ['u_proj', 'u_view']);
+
+            function getNoise(x, y, z, r) {
+                return noise.simplex3(x / r, y / r, z / r);
+            }
+
+            function wfn(x, y, z) {
+                function union(val1, val2) {
+                    return Math.min(val1, val2);
+                }
+
+                let n1 = getNoise(x, y, z, 25) / 2;
+                let n4 = getNoise(x + 100, y + 200, z + 400, 20) / 2;
+                // let n2 = Math.pow(getNoise(x, y, z, 4), 13);
+                let n2 = 0;
+                // let n3 = Math.pow(getNoise(x, y, z, 2), 19);
+                let n3 = 0;
+
+                // let n = n1 + n2 * n2  + n3 * n3 * n3 * n3 * n3;
+                let n = n1 + n4 + n2 + n3;
+                // n += getNoise(x, y, z, 4);
+                // n /= 2;
+                // n *= n * n;
+                // let n = noise.simplex3(x / 10, y / 10, z / 10);
+                n += y / 10;
+                // n *= 5;
+                return n;
+                // return y - n;
+            }
+
+            const start = Date.now();
+            // const vaos = Array(1).fill(0).map((_, i) => {
+            //     const points = marching.getMeshData(wfn, [i, 0.0, 0.0], 4, 0.5);
+            //     return createVAO(gl, points);
+            // });
+            const vaos = [];
+            // const ran = 1;
+            // for (let x = 0; x < ran; x++) {
+            //     for (let y = 0; y < ran; y++) {
+            //         for (let z = 0; z < ran; z++) {
+            //             const d = marching.getMeshData(wfn, [x-ran/2, y-ran/2, z-ran/2], 4, 1.0);
+            //             if (d[0].length) {
+            //                 vaos.push(createVAO(gl, d));
+            //             }
+            //         }
+            //     }
+            // }
+
+            // console.log(((Date.now() - start) / 1000) / 0.016);
+
+            let cvao = 0;
+            const ran = 10;
+            function updateVAOS() {
+                const range = ran * 2;
+                if (cvao == range*range*range) return;
+                let idx = cvao;
+                const z = Math.floor(idx / (range * range));
+                idx -= (z * range * range);
+                const y = Math.floor(idx / range);
+                const x = idx % range;
+                const d = marching.dualC(wfn, [x-range/2, y-range/2, z-range/2], 4, 0.5);
+                if (d[0].length) {
+                    vaos.push(createVAO(gl, d));
+                }
+                cvao += 1;
+            }
+
+            loop(delta => {
+                camera.update(delta);
+                clear(gl);
+                vaos.forEach(v => {
+                    draw(gl, program, v, {
+                        u_proj: glMatrix.mat4.perspective([], Math.PI / 3, 1.0, 0.001, 1000),
+                        u_view: camera.matrix()
+                    });
+                });
+
+                updateVAOS();
+            });
+        });
+    </script>
+</body>
+</html>

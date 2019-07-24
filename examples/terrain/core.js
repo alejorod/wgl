@@ -31,8 +31,9 @@ function enableAlpha(gl) {
 const V_SHADER = 0;
 const F_SHADER = 1;
 
-const M_POINTS = 0;
+const M_POINTS    = 0;
 const M_TRIANGLES = 1;
+const M_LINES     = 2;
 
 const W_REPEAT          = 0;
 const W_MIRRORED_REPEAT = 1;
@@ -83,8 +84,8 @@ function createTexture(gl, image, props) {
         height: 0,
         internal: T_RGB,
         format: T_RGB,
-        wrapS: W_REPEAT,
-        wrapT: W_REPEAT,
+        wrapS: W_CLAMP_TO_EDGE,
+        wrapT: W_CLAMP_TO_EDGE,
         mipmaps: F_NONE,
         minFilter: F_LINEAR,
         maxFilter: F_LINEAR,
@@ -277,7 +278,11 @@ function createProgram(gl, vshader, fshader, uniforms=[], feedbacks=[], mode=nul
                 }
                 return p;
             }, {}),
-            mode: mode === M_POINTS ? gl.POINTS : gl.TRIANGLES
+            mode: mode === M_POINTS 
+                ? gl.POINTS 
+                : mode === M_LINES
+                ? gl.LINES
+                : gl.TRIANGLES
         };
     }
     
@@ -423,33 +428,10 @@ function setUniform(gl, program, location, val, unit=0) {
     const loc = program.locations[location];
     let textureOffset = 0;
 
-    if (isArrayUniform(val)) {
-        val.forEach((v, i) => {
-            textureOffset += setUniform(
-                gl,
-                program,
-                `${location}[${i}]`,
-                v,
-                unit + textureOffset
-            );
-        })
-    } else if (isStructUniform(val)) {
-        Object.keys(val).forEach(k => {
-            textureOffset += setUniform(
-                gl,
-                program,
-                `${location}.${k}`,
-                val[k],
-                unit + textureOffset
-            );
-        });
-    } else if (loc) {
+    if (loc) {
         if (isIntegerUniform(val)) {
             gl.uniform1i(loc, val);
         } else if (isFloatUniform(val)) {
-            if (val.length) {
-                debugger;
-            }
             gl.uniform1f(loc, val);
         } else if (isTextureUniform(val)) {
             gl.activeTexture(gl.TEXTURE0 + unit);
@@ -464,6 +446,28 @@ function setUniform(gl, program, location, val, unit=0) {
             } else {
                 gl[`uniform${val.length}fv`](loc, val);
             }
+        }
+    } else {
+        if (isArrayUniform(val)) {
+            val.forEach((v, i) => {
+                textureOffset += setUniform(
+                    gl,
+                    program,
+                    `${location}[${i}]`,
+                    v,
+                    unit + textureOffset
+                );
+            })
+        } else if (isStructUniform(val)) {
+            Object.keys(val).forEach(k => {
+                textureOffset += setUniform(
+                    gl,
+                    program,
+                    `${location}.${k}`,
+                    val[k],
+                    unit + textureOffset
+                );
+            });
         }
     }
 

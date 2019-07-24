@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body>
+    <canvas width="800" height="600" id="canvas"></canvas>
+    <script src="core.js"></script>
+    <script>
+        const gl = getContext(canvas, {
+            clear: [0.0, 0.0, 0.0, 1.0]
+        });
+
+        const quad = createVAO(gl, [
+            [
+                [-1.0,  1.0, 0.0],
+                [-1.0, -1.0, 0.0],
+                [ 1.0, -1.0, 0.0],
+                [-1.0,  1.0, 0.0],
+                [ 1.0, -1.0, 0.0],
+                [ 1.0,  1.0, 0.0]
+            ],
+            [
+                [0.0, 1.0],
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 0.0],
+                [1.0, 1.0]
+            ]
+        ]);
+
+        const triangle = createVAO(gl, [
+            [
+                [ 0.0,  1.0, 0.0],
+                [-1.0, -1.0, 0.0],
+                [ 1.0, -1.0, 0.0]
+            ]
+        ]);
+
+        const svsrc = `#version 300 es
+        layout(location=0) in vec3 a_coord;
+        layout(location=1) in vec2 a_uv;
+
+        out vec2 v_uv;
+
+        void main() {
+            gl_Position = vec4(a_coord, 1.0);
+            v_uv = a_uv;
+        }
+        `;
+        const sfsrc = `#version 300 es
+        precision mediump float;
+        in vec2 v_uv;
+
+        uniform sampler2D u_texture;
+
+        out vec4 color;
+        
+        void main() {
+            color = texture(u_texture, v_uv);
+        }
+        `;
+
+        const vsrc = `#version 300 es
+        layout(location=0) in vec3 a_coord;
+
+        void main() {
+            gl_Position = vec4(a_coord, 1.0);
+        }
+        `;
+
+        const fsrc = `#version 300 es
+        precision mediump float;
+        
+        layout(location=0) out vec4 colorR;
+        layout(location=1) out vec4 colorG;
+        layout(location=2) out vec4 colorB;
+        
+        void main() {
+            colorR = vec4(1.0, 0.0, 0.0, 1.0);
+            colorG = vec4(0.0, 1.0, 0.0, 1.0);
+            colorB = vec4(0.0, 0.0, 1.0, 1.0);
+        }
+        `;
+
+        const sprogram = createProgram(
+            gl, 
+            createShader(gl, svsrc, V_SHADER),
+            createShader(gl, sfsrc, F_SHADER),
+            ['u_texture']
+        );
+        const program = createProgram(
+            gl, 
+            createShader(gl, vsrc, V_SHADER),
+            createShader(gl, fsrc, F_SHADER)
+        );
+        const target = createFBO(gl, 400, 400, 3);
+
+        useFBO(gl, target);
+        clear(gl);
+        draw(gl, program, triangle);
+
+        useFBO(gl, null);
+        clear(gl);
+        draw(gl, sprogram, quad, {
+            u_texture: target.colors[2]
+        });
+
+    </script>
+</body>
+</html>

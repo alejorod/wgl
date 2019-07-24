@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>City</title>
+</head>
+<body>
+    <canvas width="800" height="600" id="canvas"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const width = 800;
+        const height = 600;
+
+        function clear() {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        const TOWN_CENTER = 0;
+        const MAIN_ROAD = 1;
+        const ROAD = 2;
+        const ALLY = 3;
+
+        const BUILDING_SIZE = 10;
+
+        class Elem {
+            constructor(type, size) {
+                this.type = type;
+                this.size = size;
+                this.checked = false;
+            }
+        }
+
+        function parseTownCenter(townCenter) {
+            if (townCenter.checked) return [townCenter];
+
+            townCenter.checked = true;
+
+            return [
+                townCenter,
+                new Elem(MAIN_ROAD, 30), //+ Math.random() * 40),
+                new Elem(MAIN_ROAD, 30), //+ Math.random() * 40),
+                new Elem(MAIN_ROAD, 30), //+ Math.random() * 40),
+                new Elem(MAIN_ROAD, 30) //+ Math.random() * 40)
+            ];
+        }
+
+        function parseMainRaod(mainRoad) {
+            if (mainRoad.checked) return [mainRoad];
+
+            mainRoad.checked = true;
+
+            const size = mainRoad.size;
+            const count = Math.floor(size / BUILDING_SIZE);
+            const data = [mainRoad];
+
+            for (let i = 0; i < count; i++) {
+                data.push(new Elem(ROAD, 20 + Math.random() * 15));
+            }
+
+            return data;
+        }
+
+        function parseRoad(road) {
+            if (road.checked) return [road];
+
+            road.checked = true;
+
+            if (road.size <= 27) {
+                return [road];
+            }
+
+            if (road.size <= 30) {
+                return [road, new Elem(ALLY, 10)];
+            }
+
+            return [
+                road,
+                new Elem(ROAD, BUILDING_SIZE),
+                new Elem(ROAD, BUILDING_SIZE)
+            ];
+        }
+
+        function parseAlly(ally) {
+            ally.checked = true;
+            return [ally];
+        }
+
+        function parse(c) {
+            const c1 = [];
+
+            for (let i = 0; i < c.length; i++) {
+                const element = c[i];
+                let childs = [];
+
+                if (element.type == TOWN_CENTER) {
+                    childs = parseTownCenter(element);
+                } else if (element.type == MAIN_ROAD) {
+                    childs = parseMainRaod(element);
+                } else if (element.type == ROAD) {
+                    childs = parseRoad(element);
+                } else {
+                    childs = parseAlly(element);
+                }
+
+                childs.forEach(e => {
+                    c1.push(e);
+                });
+            }
+
+            return c1;
+        }
+
+        function isEqual(c1, c2) {
+            if (c1.length != c2.length) return false;
+
+            for (let i = 0; i < c1.length; i++) {
+                
+                if (c1[i].type != c2[i].type) return false;
+                if (c1[i].size != c2[i].size) return false;
+            }
+
+            return true;
+        }
+
+        function fullParse(c) {
+            const cs = [c, []];
+            let i = 0;
+
+            while(!isEqual(cs[i % 2], cs[(i + 1) % 2])) {
+                i += 1;
+                cs[i % 2] = parse(cs[(i + 1) % 2]);
+            }
+
+            return cs[0];
+        }
+
+        class Node {
+            constructor(elem) {
+                this.elem = elem;
+                this.childs = [];
+            }
+            
+            addChild(elem) {
+                this.childs.push(elem);
+            }
+        }
+
+        function buildTree(c) {
+            const root = new Node(c.shift());
+            const parents = [root];
+            let currentParent = parents[0];
+
+            while(c.length) {
+                while(c[0].type == currentParent.elem.type + 1) {
+                    currentParent.addChild(new Node(c.shift()));
+                    if (!c.length) {
+                        break;
+                    }
+                }
+
+                if (!c.length) {
+                    break;
+                }
+
+
+                if (c[0].type > currentParent.elem.type + 1) {
+                    parents.push(currentParent.childs[currentParent.childs.length - 1]);
+                } else {
+                    parents.pop();
+                }
+
+                currentParent = parents[parents.length - 1];
+            }
+
+            return root;
+        }
+
+        function drawCenter(node, idx) {
+            ctx.strokeStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(width / 2, height / 2, node.elem.size, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.closePath();
+
+            if (node.childs) {
+                node.childs.forEach((c, i) => {
+                    drawTree(c, i, [node]);
+                });
+            }
+        }
+
+        function drawMainRoad(node, idx, parents) {
+            const parent = parents[0];
+            const angle = (Math.PI / 2) * idx;
+            const dx = Math.cos(angle);
+            const dy = Math.sin(angle);
+
+            const x0 = width / 2 + dx * parent.elem.size;
+            const y0 = height / 2 + dy * parent.elem.size;
+
+            const x1 = width / 2 + dx * (parent.elem.size + node.elem.size);
+            const y1 = height / 2 + dy * (parent.elem.size + node.elem.size);
+
+            node.data = {
+                x0, y0, x1, y1, angle
+            };
+
+            ctx.strokeStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.stroke();
+            ctx.closePath();
+
+            if (node.childs) {
+                node.childs.forEach((c, i) => {
+                    drawTree(c, i, [node, parent]);
+                });
+            }
+        }
+
+        function drawRoad(node, idx, parents) {
+            const d = (idx + 1) * BUILDING_SIZE;
+            const parent = parents[0];
+
+            let dir = {
+                x: parent.data.x1 - parent.data.x0,
+                y: parent.data.y1 - parent.data.y0
+            };
+            let m = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+            dir.x /= m;
+            dir.y /= m;
+
+            const x0 = parent.data.x0 + dir.x * d;
+            const y0 = parent.data.y0 + dir.y * d;
+            const angle = Math.PI / 2 + parent.data.angle * (idx % 2 ? 1 : -1);
+
+            const dx = Math.cos(angle);
+            const dy = Math.sin(angle);
+
+            const x1 = x0 + dx * node.elem.size;
+            const y1 = y0 + dy * node.elem.size;
+
+            ctx.strokeStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        function drawTree(tree, idx, parents) {
+            if (tree.elem.type == TOWN_CENTER) {
+                drawCenter(tree, 0, parents);
+            } else if (tree.elem.type == MAIN_ROAD) {
+                drawMainRoad(tree, idx, parents);
+            } else if (tree.elem.type == ROAD) {
+                drawRoad(tree, idx, parents)
+            }
+        }
+
+        function main() {
+            const center = new Elem(TOWN_CENTER, 20);
+            const res = fullParse([center]);
+            const tree = buildTree(res);
+
+            clear();
+            drawTree(tree);
+        }
+
+
+        main();
+    </script>
+</body>
+</html>
