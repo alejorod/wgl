@@ -15,8 +15,8 @@ uniform mat4 u_proj;
 uniform float u_width;
 uniform float u_height;
 
-const float radius = 0.5;
-const float bias = 0.02;
+const float radius = 0.25;
+const float bias = 0.002;
 const int kernel_size = 16;
 
 void main()

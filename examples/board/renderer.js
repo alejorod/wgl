@@ -224,17 +224,25 @@ class Renderer {
 
 
 class Transform {
-    constructor(x, y, z, h) {
+    constructor(x, y, z, sx=1.0, sy=1.0, sz=1.0, rx=0.0, ry=0.0, rz=0.0) {
         this.x = x;
         this.y = y;
         this.z = z;
-        this.h = h;
+        this.sx = sx;
+        this.sy = sy;
+        this.sz = sz;
+        this.rx = rx;
+        this.ry = ry;
+        this.rz = rz;
     }
 
     matrix() {
         const mat = glMatrix.mat4.identity([]);
-        glMatrix.mat4.translate(mat, mat, [this.x, this.h / 2, this.z]);
-        glMatrix.mat4.scale(mat, mat, [1.0, this.h, 1.0]);
+        glMatrix.mat4.translate(mat, mat, [this.x, this.y, this.z]);
+        glMatrix.mat4.rotateZ(mat, mat, this.rz, [0.0, 0.0, 1.0]);
+        glMatrix.mat4.rotateX(mat, mat, this.rx, [1.0, 0.0, 0.0]);
+        glMatrix.mat4.rotateY(mat, mat, this.ry, [0.0, 1.0, 0.0]);
+        glMatrix.mat4.scale(mat, mat, [this.sx, this.sy, this.sz]);
         return mat;
     }
 }

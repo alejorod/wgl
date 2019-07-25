@@ -21,6 +21,7 @@ gl.enable(gl.DEPTH_TEST);
 
 Promise.all([
     loadSrc('cube.obj'),
+    loadSrc('cone.obj'),
     shaders.addVertFromPath('base_vs', 'shaders/base.vs'),
     shaders.addFragFromPath('base_fs', 'shaders/base.fs'),
     shaders.addVertFromPath('screen_vs', 'shaders/screen.vs'),
@@ -61,12 +62,24 @@ Promise.all([
     noise.seed(random() * 100);
     for (let x = 0; x < count; x++) {
         for (let z = 0; z < count; z++) {
-            let h = (noise.simplex2(x / 8, z / 8) + 1.0) / 2.0;
+            const h = (noise.simplex2(x / 8, z / 8) + 1.0) / 2.0;
             entities.push(new Entity(
                 vao, 'base', 
-                new Transform(x - count / 2, 0, z - count / 2, h * 4)
+                new Transform(x - count / 2, h * 2, z - count / 2, 1.0, h * 4, 1.0)
             ));
         }
+    }
+
+    const conev = createVAO(gl, parseOBJ(res[1]).map(d => createBuffer(gl, d)));
+
+    for (let i = 0; i < count; i++) {
+        const x = Math.floor(Math.random() * count);
+        const z = Math.floor(Math.random() * count);
+        const h = (noise.simplex2(x / 8, z / 8) + 1.0) / 2.0;
+        entities.push(new Entity(
+            conev, 'base', 
+            new Transform(x - count / 2, h * 4, z - count / 2, 0.5, 2.5, 0.5, 0.0, Math.random() * Math.PI)
+        ));
     }
 
     loop(main).start();
